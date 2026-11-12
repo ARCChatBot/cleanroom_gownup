@@ -383,7 +383,7 @@ export function buildEnvironment(scene, renderer) {
     roomSign.position.set(-1.85, 2.4, ROOM.minZ + 0.005);
     room.add(roomSign);
     const poster = textPlate(
-        ['GOWNING SEQUENCE', '1  Shoe covers', '2  Bouffant / beard cover', '3  Coverall', '4  Mask & glasses', '5  Nitrile gloves', '6  ESD strap + test'],
+        ['GOWNING SEQUENCE', '1  Shoe covers', '2  Bouffant / hairnet', '3  Coverall', '4  Mask & glasses', '5  Nitrile gloves', '6  ESD strap + test'],
         0.5, 0.7, { bg: '#ffffff', fg: '#002B49', font: 'bold 64px' }
     );
     poster.position.set(ROOM.minX + 0.005, 1.5, -0.15);
@@ -491,14 +491,14 @@ export function buildEnvironment(scene, renderer) {
     booties.position.set(-2.3, 1.05, zw);
     addStation('shoe_covers', booties, '1  SHOE COVERS', new THREE.Vector3(-2.3, 0.8, zw + 0.005), 0, new THREE.Vector3(-2.3, 1.45, zw + 0.15));
 
-    // 2. Bouffant / beard cover dispenser
+    // 2. Bouffant / hairnet dispenser
     const bouffant = wallDispenser(0.42, 0.34, 0.2, M.fabric, () => {
         const m = new THREE.Mesh(new THREE.SphereGeometry(0.055, 12, 8));
         m.scale.set(1.2, 0.7, 0.7);
         return m;
     });
     bouffant.position.set(-1.45, 1.4, zw);
-    addStation('hair_cover', bouffant, '2  BOUFFANT / BEARD', new THREE.Vector3(-1.45, 1.15, zw + 0.005), 0, new THREE.Vector3(-1.45, 1.8, zw + 0.15));
+    addStation('hair_cover', bouffant, '2  HAIRNET', new THREE.Vector3(-1.45, 1.15, zw + 0.005), 0, new THREE.Vector3(-1.45, 1.8, zw + 0.15));
 
     // 3. Coverall rack
     const rack = new THREE.Group();
