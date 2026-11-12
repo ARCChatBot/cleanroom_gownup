@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VSU Cleanroom & ESD VR Training</title>
+
+    <!--
+      Zero-build setup: the browser resolves "three" from a pinned CDN build,
+      so no bundler, node_modules or dependency scan is needed.
+      Serve this folder with any static server (see README.md).
+      Vite still works too: it rewrites these bare imports to node_modules.
+    -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"
+        }
+      }
+    </script>
+
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        background-color: #002B49;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+      #hud {
+        position: fixed;
+        top: 16px;
+        left: 16px;
+        max-width: 320px;
+        padding: 14px 16px;
+        background: rgba(0, 43, 73, 0.92);
+        color: #fff;
+        border-left: 4px solid #FF6600;
+        border-radius: 6px;
+        font-size: 13px;
+        line-height: 1.45;
+        pointer-events: none;
+      }
+      #hud h1 { font-size: 14px; margin: 0 0 6px; letter-spacing: 0.04em; }
+      #hud ol { margin: 8px 0; padding-left: 0; list-style: none; }
+      #hud li.done { color: #10b981; }
+      #hud li.next { color: #FF6600; font-weight: 600; }
+      #hud .hint { opacity: 0.75; font-size: 12px; }
+      #hud .alert { color: #f87171; font-weight: 600; min-height: 1.2em; }
+      @media (max-width: 640px) {
+        #hud { top: 8px; left: 8px; right: 8px; max-width: none; padding: 8px 10px; font-size: 11px; }
+        #hud ol, #hud .hint { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="hud">
+      <h1>VSU CLEANROOM &amp; ESD PROTOCOL</h1>
+      <ol id="hud-list"></ol>
+      <div class="alert" id="hud-alert"></div>
+      <div class="hint">
+        Desktop: click each station under the orange marker, in order. WASD to walk, arrow keys to turn.<br />
+        VR: squeeze the grip at a dispenser to take the item, then put it on: booties to your feet, bouffant on your head, coverall to your chest, mask to your face, gloves and wrist strap to your other hand. Left stick moves, right stick turns.
+      </div>
+    </div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
