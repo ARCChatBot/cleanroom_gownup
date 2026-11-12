@@ -226,6 +226,7 @@ export function setupVR({ renderer, scene, camera, env, steps, api }) {
     // Sized for a Quest field of view (the plane is wider than you can see).
     // ---------------------------------------------------------------
     const OW = 1024, OH = 720;
+    const OVERLAY_DIST = 0.3;
     function overlayPlane(draw, order) {
         const cv = document.createElement('canvas');
         cv.width = OW;
@@ -237,7 +238,10 @@ export function setupVR({ renderer, scene, camera, env, steps, api }) {
             new THREE.PlaneGeometry(0.52, 0.366),
             new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, toneMapped: false })
         );
-        m.position.z = -0.14;
+        // 30 cm away and scaled up to the same angular size: at 14 cm the two eyes
+        // see it ~26 degrees apart and the brain suppresses it, like your own nose.
+        m.position.z = -OVERLAY_DIST;
+        m.scale.setScalar(OVERLAY_DIST / 0.14);
         m.renderOrder = order;
         m.frustumCulled = false;
         m.visible = false;
@@ -274,12 +278,17 @@ export function setupVR({ renderer, scene, camera, env, steps, api }) {
         c.restore();
     }, 1000);
 
+    function setOverlay(m, on) {
+        if (on && !m.visible) { m.material.opacity = 0; m.userData.fadeIn = true; }
+        m.visible = on;
+    }
+
     // Mask: pleated fabric from the bottom up to a nose bridge just under the eyes
     const maskOverlay = overlayPlane((c, W, H) => {
         const top = (x) => {
             // Mask top edge: rises toward the nose wire in the middle
             const d = (x - 0.5) / 0.5;
-            return H * (0.62 + 0.07 * d * d);
+            return H * (0.565 + 0.06 * d * d);
         };
         c.save();
         c.filter = 'blur(7px)';
@@ -291,10 +300,10 @@ export function setupVR({ renderer, scene, camera, env, steps, api }) {
         }
         c.lineTo(W + 40, H + 40);
         c.closePath();
-        const fab = c.createLinearGradient(0, H * 0.6, 0, H);
-        fab.addColorStop(0, '#f1f3f5');
-        fab.addColorStop(0.5, '#d4d9dd');
-        fab.addColorStop(1, '#9ea5ac');
+        const fab = c.createLinearGradient(0, H * 0.55, 0, H);
+        fab.addColorStop(0, '#eef1f3');
+        fab.addColorStop(0.35, '#c9cfd4');
+        fab.addColorStop(1, '#6f777e');
         c.fillStyle = fab;
         c.fill();
         c.restore();
@@ -314,7 +323,7 @@ export function setupVR({ renderer, scene, camera, env, steps, api }) {
         };
         curve(10, 'rgba(255,255,255,0.9)', 12);
         curve(22, 'rgba(0,0,0,0.10)', 3);
-        for (const off of [70, 125, 185]) {
+        for (const off of [60, 115, 175, 240]) {
             curve(off, 'rgba(0,0,0,0.12)', 4);
             curve(off + 6, 'rgba(255,255,255,0.35)', 3);
         }
@@ -551,8 +560,8 @@ export function setupVR({ renderer, scene, camera, env, steps, api }) {
         booties.visible = idx > 0;
         street.visible = idx <= 2;
         suit.visible = idx > 2;
-        hoodOverlay.visible = idx > 2;
-        maskOverlay.visible = idx > 3;
+        setOverlay(hoodOverlay, idx > 2);
+        setOverlay(maskOverlay, idx > 3);
         hands.forEach((h) => {
             if (!h.hand) return;
             h.hand.cuff.visible = idx > 2;
@@ -606,6 +615,14 @@ export function setupVR({ renderer, scene, camera, env, steps, api }) {
     function update(dt, t) {
         const xr = renderer.xr.isPresenting;
         if (xr) locomotion(dt);
+
+        // Overlays fade in over ~0.6 s when you put the hood / mask on
+        for (const m of [hoodOverlay, maskOverlay]) {
+            if (m.userData.fadeIn) {
+                m.material.opacity = Math.min(1, m.material.opacity + dt / 0.6);
+                if (m.material.opacity >= 1) m.userData.fadeIn = false;
+            }
+        }
 
         // Body follows you: sits just behind the eyes, turns smoothly with your head
         camera.getWorldPosition(head);
