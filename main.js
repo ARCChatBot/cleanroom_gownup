@@ -67,8 +67,8 @@ function pulse(controller, intensity = 0.5, duration = 100) {
 const gowningSteps = [
     { id: 'shoe_covers',    short: 'Shoe Covers',  label: '1. Shoe Covers / Dedicated Booties',
       vr: 'Grab booties from the dispenser (grip), then reach down to your feet.' },
-    { id: 'hair_cover',     short: 'Bouffant',     label: '2. Bouffant / Hair & Beard Cover',
-      vr: 'Grab a bouffant and place it on top of your head.' },
+    { id: 'hair_cover',     short: 'Hairnet',      label: '2. Bouffant / Hairnet',
+      vr: 'Grab a hairnet and place it on top of your head.' },
     { id: 'gowning_suit',   short: 'Coverall',     label: '3. Lint-Free Coverall Suit',
       vr: 'Take a coverall from the rack and hold it against your chest.' },
     { id: 'face_mask',      short: 'Mask/Glasses', label: '4. Face Mask & Safety Glasses',
