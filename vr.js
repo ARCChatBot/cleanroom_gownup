@@ -161,6 +161,18 @@ export function setupVR({ renderer, scene, camera, env, steps, api }) {
     ghostRing.visible = false;
     scene.add(ghostRing);
 
+    // Teleport target: point the laser at the floor, pull the trigger to go there
+    const teleportMarker = new THREE.Group();
+    const tpMat = new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.85, depthWrite: false });
+    const tpRing = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.25, 40), tpMat);
+    tpRing.rotation.x = -Math.PI / 2;
+    teleportMarker.add(tpRing);
+    const tpDot = new THREE.Mesh(new THREE.CircleGeometry(0.05, 20), tpMat);
+    tpDot.rotation.x = -Math.PI / 2;
+    teleportMarker.add(tpDot);
+    teleportMarker.visible = false;
+    scene.add(teleportMarker);
+
     // Booties at your feet once step 1 is done (visible when you look down)
     const feet = new THREE.Group();
     for (const s of [-1, 1]) {
@@ -216,7 +228,7 @@ export function setupVR({ renderer, scene, camera, env, steps, api }) {
             wrapText(c, alert, 32, 100, 460, 34);
         } else if (step) {
             c.fillStyle = '#FFB27a';
-            const text = step.id === 'esd_grounding' && strapOn ? 'Stand on the ESD mat and touch the tester with your strapped hand.' : step.vr;
+            const text = step.id === 'esd_grounding' && strapOn ? 'Point at the ESD mat and pull the trigger to step onto it, then touch the tester with your strapped hand.' : step.vr;
             wrapText(c, text, 32, 100, 460, 34);
         } else {
             c.fillStyle = '#34d399';
@@ -274,6 +286,30 @@ export function setupVR({ renderer, scene, camera, env, steps, api }) {
         return hit && (hit.object.userData.stepId || hit.object.userData.action) ? hit : null;
     }
 
+    // Where the controller ray meets the floor (inside the room), or null
+    const floorHit = new THREE.Vector3();
+    function aimFloor(h) {
+        tempMatrix.identity().extractRotation(h.controller.matrixWorld);
+        const o = tmp.setFromMatrixPosition(h.controller.matrixWorld);
+        const d = tmp2.set(0, 0, -1).applyMatrix4(tempMatrix);
+        if (d.y > -0.08) return null; // must point downward
+        const dist = -o.y / d.y;
+        if (dist > 8) return null;
+        const r = env.room;
+        floorHit.set(
+            THREE.MathUtils.clamp(o.x + d.x * dist, r.minX + 0.3, r.maxX - 0.3),
+            0,
+            THREE.MathUtils.clamp(o.z + d.z * dist, r.minZ + 0.3, r.maxZ - 0.3)
+        );
+        return floorHit;
+    }
+
+    function teleportTo(p) {
+        camera.getWorldPosition(head);
+        rig.position.x += p.x - head.x;
+        rig.position.z += p.z - head.z;
+    }
+
     function stationInReach(h) {
         h.grip.getWorldPosition(tmp);
         return stationBoxes.find((s) => s.box.containsPoint(tmp))?.id || null;
@@ -286,6 +322,11 @@ export function setupVR({ renderer, scene, camera, env, steps, api }) {
             const hit = aim(h);
             if (hit?.object.userData.action) { api.action(hit.object.userData.action, h.controller); return; }
             stepId = hit?.object.userData.stepId || null;
+            if (!stepId && button === 'select') {
+                const p = aimFloor(h);
+                if (p) { teleportTo(p); pulse(h, 0.2, 30); }
+                return;
+            }
         }
         if (!stepId) return;
 
@@ -294,7 +335,7 @@ export function setupVR({ renderer, scene, camera, env, steps, api }) {
         // Strap already on: touching/pointing at the tester runs the continuity check
         if (stepId === 'esd_grounding' && strapOn) {
             if (api.onMat()) api.complete('esd_grounding', h.controller);
-            else api.alert('Stand on the ESD grounding mat before testing.', h.controller);
+            else api.alert('Step onto the ESD mat first: point at it and pull the trigger.', h.controller);
             return;
         }
 
@@ -432,6 +473,7 @@ export function setupVR({ renderer, scene, camera, env, steps, api }) {
         ghost.visible = false;
         ghostRing.visible = false;
         reticle.visible = false;
+        teleportMarker.visible = false;
 
         hands.forEach((h) => {
             // Haptic tick when your hand enters a dispenser's reach
@@ -453,8 +495,20 @@ export function setupVR({ renderer, scene, camera, env, steps, api }) {
             } else if (xr) {
                 h.laser.visible = true;
                 const hit = aim(h);
-                h.laser.scale.z = hit ? hit.distance : 3;
-                if (hit) { reticle.visible = true; reticle.position.copy(hit.point); }
+                const fp = hit ? null : aimFloor(h);
+                if (hit) {
+                    h.laser.scale.z = hit.distance;
+                    reticle.visible = true;
+                    reticle.position.copy(hit.point);
+                } else if (fp) {
+                    h.controller.getWorldPosition(tmp);
+                    h.laser.scale.z = tmp.distanceTo(fp);
+                    teleportMarker.visible = true;
+                    teleportMarker.position.set(fp.x, 0.01, fp.z);
+                    tpMat.opacity = 0.6 + 0.25 * Math.sin(t * 6);
+                } else {
+                    h.laser.scale.z = 3;
+                }
             }
         });
 
