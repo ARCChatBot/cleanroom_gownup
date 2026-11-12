@@ -6,8 +6,9 @@
 //   let go anywhere else             -> it falls to the floor (contaminated)
 //
 // Also: player rig with thumbstick locomotion + snap turn, mitten hands that
-// change as you gown (sleeve cuffs, nitrile gloves, ESD strap), booties at your
-// feet, and a wrist display with the current instruction.
+// change as you gown (sleeve cuffs, nitrile gloves, ESD strap), a body you see
+// when you look down (street clothes -> coverall, shoes -> booties), the mask and
+// goggles framing your view once they are on, and a wrist display.
 import * as THREE from 'three';
 
 const SKIN = 0xc9a183;
@@ -173,13 +174,152 @@ export function setupVR({ renderer, scene, camera, env, steps, api }) {
     teleportMarker.visible = false;
     scene.add(teleportMarker);
 
-    // Booties at your feet once step 1 is done (visible when you look down)
-    const feet = new THREE.Group();
-    for (const s of [-1, 1]) {
-        mesh(new THREE.SphereGeometry(0.07, 16, 10), M.blue, feet, s * 0.11, 0.045, 0.02).scale.set(0.85, 0.6, 1.7);
+    // ---------------------------------------------------------------
+    // First-person body (look down to see it). Built for a 1.65 m eye
+    // height and scaled to the trainee. Street clothes -> coverall.
+    // ---------------------------------------------------------------
+    const body = new THREE.Group();
+    scene.add(body);
+    const BM = {
+        shirt: new THREE.MeshStandardMaterial({ color: 0x3d4b5c, roughness: 0.85 }),
+        jeans: new THREE.MeshStandardMaterial({ color: 0x2c4670, roughness: 0.8 }),
+        shoe: new THREE.MeshStandardMaterial({ color: 0x1f2226, roughness: 0.5 }),
+        suit: new THREE.MeshPhysicalMaterial({ color: 0xf4f6f8, roughness: 0.88, sheen: 1, sheenColor: new THREE.Color(0xffffff), sheenRoughness: 0.6 })
+    };
+    function buildOutfit(torsoMat, legMat, pad) {
+        const g = new THREE.Group();
+        const torso = mesh(new THREE.CapsuleGeometry(0.16 + pad, 0.28, 6, 18), torsoMat, g, 0, 1.08, 0);
+        torso.scale.z = 0.6;
+        const hips = mesh(new THREE.CapsuleGeometry(0.13 + pad, 0.1, 6, 16), legMat, g, 0, 0.88, 0);
+        hips.rotation.z = Math.PI / 2;
+        hips.scale.y = 0.7;
+        for (const x of [-1, 1]) {
+            mesh(new THREE.CapsuleGeometry(0.068 + pad, 0.68, 4, 14), legMat, g, x * 0.095, 0.5, 0);
+        }
+        return g;
     }
-    feet.visible = false;
-    scene.add(feet);
+    const street = buildOutfit(BM.shirt, BM.jeans, 0);
+    const suit = buildOutfit(BM.suit, BM.suit, 0.014);
+    // Coverall details: zipper, collar, VSU chest patch
+    mesh(new THREE.BoxGeometry(0.012, 0.5, 0.006), M.black, suit, 0, 1.02, 0.106);
+    mesh(new THREE.BoxGeometry(0.07, 0.04, 0.006), M.vsuBlue, suit, -0.08, 1.16, 0.1);
+    body.add(street, suit);
+
+    const shoes = new THREE.Group();
+    const booties = new THREE.Group();
+    for (const x of [-1, 1]) {
+        mesh(new THREE.SphereGeometry(0.06, 14, 10), BM.shoe, shoes, x * 0.1, 0.04, 0.05).scale.set(0.85, 0.6, 1.8);
+        mesh(new THREE.SphereGeometry(0.07, 16, 10), M.blue, booties, x * 0.1, 0.05, 0.05).scale.set(0.9, 0.7, 1.8);
+    }
+    body.add(shoes, booties);
+    let bodyYaw = 0;
+    const headQuat = new THREE.Quaternion();
+    const headEuler = new THREE.Euler();
+    const neck = new THREE.Vector3();
+    const EYE_FROM_NECK = new THREE.Vector3(0, 0.1, -0.1); // eyes sit up and forward of the neck pivot
+
+    // ---------------------------------------------------------------
+    // Inside-the-hood view. Step 3 (hooded coverall): the hood's fabric
+    // frames your view at the top and sides. Step 4 (mask): the pleated
+    // mask rises to just under your eyes, so you see out through the eye
+    // opening only. Fabric this close to the eye is drawn soft/out of focus.
+    // Sized for a Quest field of view (the plane is wider than you can see).
+    // ---------------------------------------------------------------
+    const OW = 1024, OH = 720;
+    function overlayPlane(draw, order) {
+        const cv = document.createElement('canvas');
+        cv.width = OW;
+        cv.height = OH;
+        draw(cv.getContext('2d'), OW, OH);
+        const tex = new THREE.CanvasTexture(cv);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        const m = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.52, 0.366),
+            new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, toneMapped: false })
+        );
+        m.position.z = -0.14;
+        m.renderOrder = order;
+        m.frustumCulled = false;
+        m.visible = false;
+        camera.add(m);
+        return m;
+    }
+
+    // Hood: white fabric everywhere except the face opening, shadowed toward the edges
+    const hoodOverlay = overlayPlane((c, W, H) => {
+        const shade = c.createRadialGradient(W * 0.5, H * 0.5, W * 0.18, W * 0.5, H * 0.5, W * 0.6);
+        shade.addColorStop(0, '#d3d7db');
+        shade.addColorStop(0.5, '#a7adb3');
+        shade.addColorStop(1, '#5f666d');
+        c.fillStyle = shade;
+        c.fillRect(0, 0, W, H);
+        // Subtle woven texture
+        for (let i = 0; i < 2500; i++) {
+            c.fillStyle = `rgba(0,0,0,${Math.random() * 0.05})`;
+            c.fillRect(Math.random() * W, Math.random() * H, 2, 2);
+        }
+        // Face opening (open at the bottom), with a soft out-of-focus edge
+        c.save();
+        c.globalCompositeOperation = 'destination-out';
+        c.fillStyle = '#000'; // fully remove the fabric inside the opening
+        c.filter = 'blur(22px)';
+        c.beginPath();
+        c.moveTo(W * 0.29, H * 1.2);
+        c.lineTo(W * 0.27, H * 0.46);
+        c.bezierCurveTo(W * 0.28, H * 0.28, W * 0.39, H * 0.24, W * 0.5, H * 0.24);
+        c.bezierCurveTo(W * 0.61, H * 0.24, W * 0.72, H * 0.28, W * 0.73, H * 0.46);
+        c.lineTo(W * 0.71, H * 1.2);
+        c.closePath();
+        c.fill();
+        c.restore();
+    }, 1000);
+
+    // Mask: pleated fabric from the bottom up to a nose bridge just under the eyes
+    const maskOverlay = overlayPlane((c, W, H) => {
+        const top = (x) => {
+            // Mask top edge: rises toward the nose wire in the middle
+            const d = (x - 0.5) / 0.5;
+            return H * (0.62 + 0.07 * d * d);
+        };
+        c.save();
+        c.filter = 'blur(7px)';
+        c.beginPath();
+        c.moveTo(-40, H + 40);
+        for (let i = 0; i <= 40; i++) {
+            const x = i / 40;
+            c.lineTo(-40 + (W + 80) * x, top(x));
+        }
+        c.lineTo(W + 40, H + 40);
+        c.closePath();
+        const fab = c.createLinearGradient(0, H * 0.6, 0, H);
+        fab.addColorStop(0, '#f1f3f5');
+        fab.addColorStop(0.5, '#d4d9dd');
+        fab.addColorStop(1, '#9ea5ac');
+        c.fillStyle = fab;
+        c.fill();
+        c.restore();
+        // Bound top edge and pleats, following the mask's curve
+        c.save();
+        c.filter = 'blur(3px)';
+        const curve = (offset, color, width) => {
+            c.beginPath();
+            for (let i = 0; i <= 40; i++) {
+                const x = i / 40;
+                const y = top(x) + offset;
+                if (i === 0) c.moveTo(W * x, y); else c.lineTo(W * x, y);
+            }
+            c.strokeStyle = color;
+            c.lineWidth = width;
+            c.stroke();
+        };
+        curve(10, 'rgba(255,255,255,0.9)', 12);
+        curve(22, 'rgba(0,0,0,0.10)', 3);
+        for (const off of [70, 125, 185]) {
+            curve(off, 'rgba(0,0,0,0.12)', 4);
+            curve(off + 6, 'rgba(255,255,255,0.35)', 3);
+        }
+        c.restore();
+    }, 1001);
 
     // Wrist display (left hand) with the current instruction
     const wristCanvas = document.createElement('canvas');
@@ -407,7 +547,12 @@ export function setupVR({ renderer, scene, camera, env, steps, api }) {
     function applyState(idx) {
         stepIndex = idx;
         if (idx === 0) { strapOn = false; strapHand = null; }
-        feet.visible = idx > 0;
+        shoes.visible = idx === 0;
+        booties.visible = idx > 0;
+        street.visible = idx <= 2;
+        suit.visible = idx > 2;
+        hoodOverlay.visible = idx > 2;
+        maskOverlay.visible = idx > 3;
         hands.forEach((h) => {
             if (!h.hand) return;
             h.hand.cuff.visible = idx > 2;
@@ -462,13 +607,20 @@ export function setupVR({ renderer, scene, camera, env, steps, api }) {
         const xr = renderer.xr.isPresenting;
         if (xr) locomotion(dt);
 
-        // Booties follow your feet
-        if (feet.visible) {
-            camera.getWorldPosition(head);
-            camera.getWorldDirection(fwd);
-            feet.position.set(head.x, 0, head.z);
-            feet.rotation.y = Math.atan2(fwd.x, fwd.z);
-        }
+        // Body follows you: sits just behind the eyes, turns smoothly with your head
+        camera.getWorldPosition(head);
+        camera.getWorldQuaternion(headQuat);
+        const headYaw = headEuler.setFromQuaternion(headQuat, 'YXZ').y + Math.PI; // stable even looking straight down
+        let dy = headYaw - bodyYaw;
+        dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+        bodyYaw += dy * (1 - Math.exp(-dt * 4));
+        // Hang the body from the neck, so looking down tilts your eyes out over your chest
+        neck.copy(EYE_FROM_NECK).applyQuaternion(headQuat);
+        neck.subVectors(head, neck);
+        const scale = THREE.MathUtils.clamp((neck.y + 0.1) / 1.65, 0.6, 1.25);
+        body.scale.setScalar(scale);
+        body.position.set(neck.x, 0, neck.z);
+        body.rotation.y = bodyYaw;
 
         ghost.visible = false;
         ghostRing.visible = false;
