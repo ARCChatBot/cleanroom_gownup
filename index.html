@@ -51,9 +51,67 @@
         #hud { top: 8px; left: 8px; right: 8px; max-width: none; padding: 8px 10px; font-size: 11px; }
         #hud ol, #hud .hint { display: none; }
       }
+
+      /* Start + submit screens */
+      body.gated #hud, body.gated #VRButton { visibility: hidden; }
+      .screen {
+        position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+        padding: 16px; background: rgba(0, 27, 46, 0.78); z-index: 10;
+      }
+      .screen[hidden] { display: none; }
+      .card {
+        width: 100%; max-width: 420px; max-height: calc(100vh - 32px); overflow-y: auto;
+        background: #ffffff; color: #0f1f2e; border-radius: 10px; border-top: 6px solid #FF6600;
+        padding: 24px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35); box-sizing: border-box;
+      }
+      .card h2 { margin: 0 0 4px; font-size: 20px; color: #002B49; }
+      .card p { margin: 0 0 16px; font-size: 14px; color: #44556a; line-height: 1.45; }
+      .card label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 4px; color: #002B49; }
+      .card input {
+        width: 100%; box-sizing: border-box; padding: 12px; font-size: 16px;
+        border: 1px solid #b8c4d0; border-radius: 6px;
+      }
+      .card input:focus { outline: 2px solid #FF6600; border-color: transparent; }
+      .btn {
+        display: block; width: 100%; margin-top: 18px; padding: 14px; font-size: 16px; font-weight: 700;
+        border: 0; border-radius: 6px; background: #FF6600; color: #fff; cursor: pointer;
+      }
+      .btn:disabled { background: #c9d2db; cursor: not-allowed; }
+      .btn.secondary { background: #e8eef4; color: #002B49; margin-top: 10px; }
+      .card dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0 0 4px; font-size: 14px; }
+      .card dt { color: #5b6b7c; }
+      .card dd { margin: 0; font-weight: 600; text-align: right; }
+      .card dd.code { font-family: ui-monospace, monospace; color: #FF6600; letter-spacing: 0.04em; }
+      .small { font-size: 12px !important; margin-top: 12px !important; }
     </style>
   </head>
-  <body>
+  <body class="gated">
+    <!-- Start screen: who is training -->
+    <div class="screen" id="start-screen">
+      <form class="card" id="start-form" autocomplete="on">
+        <h2>VSU Cleanroom Gowning Training</h2>
+        <p>Enter your details before you begin. Your result is recorded when you finish.</p>
+        <label for="trainee-name">Full name</label>
+        <input id="trainee-name" name="name" autocomplete="name" required />
+        <label for="trainee-id">Student ID</label>
+        <input id="trainee-id" name="student-id" required />
+        <button class="btn" id="begin-btn" type="submit" disabled>Begin training</button>
+      </form>
+    </div>
+
+    <!-- Submit screen: shown after clearance -->
+    <div class="screen" id="submit-screen" hidden>
+      <div class="card">
+        <h2>Training complete</h2>
+        <p>You are cleared for fabrication. Submit your record so your instructor can verify it.</p>
+        <dl id="record-summary"></dl>
+        <button class="btn" id="submit-btn" type="button">Submit training record</button>
+        <p class="small" id="submit-note"></p>
+        <button class="btn secondary" id="copy-btn" type="button">Copy record</button>
+        <button class="btn secondary" id="new-trainee-btn" type="button">Start a new trainee</button>
+      </div>
+    </div>
+
     <div id="hud">
       <h1>VSU CLEANROOM &amp; ESD PROTOCOL</h1>
       <ol id="hud-list"></ol>

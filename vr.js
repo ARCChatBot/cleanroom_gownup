@@ -381,7 +381,7 @@ export function setupVR({ renderer, scene, camera, env, steps, api }) {
             wrapText(c, text, 32, 100, 460, 34);
         } else {
             c.fillStyle = '#34d399';
-            wrapText(c, 'STATUS: CLEARED FOR FABRICATION. Proceed to the air shower.', 32, 100, 460, 34);
+            wrapText(c, api.clearedText ? api.clearedText() : 'STATUS: CLEARED FOR FABRICATION.', 32, 100, 460, 34);
         }
         wristTex.needsUpdate = true;
     }
@@ -484,7 +484,7 @@ export function setupVR({ renderer, scene, camera, env, steps, api }) {
         // Strap already on: touching/pointing at the tester runs the continuity check
         if (stepId === 'esd_grounding' && strapOn) {
             if (api.onMat()) api.complete('esd_grounding', h.controller);
-            else api.alert('Step onto the ESD mat first: point at it and pull the trigger.', h.controller);
+            else { api.onViolation?.(); api.alert('Step onto the ESD mat first: point at it and pull the trigger.', h.controller); }
             return;
         }
 
@@ -504,6 +504,7 @@ export function setupVR({ renderer, scene, camera, env, steps, api }) {
         h.held = null;
         scene.attach(item);
         falling.push({ item, vy: 0, age: 0 });
+        api.onDrop?.();
         api.alert('Garment dropped. It is contaminated. Take a fresh one.', h.controller);
     }
 

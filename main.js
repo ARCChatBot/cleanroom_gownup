@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { buildEnvironment } from './environment.js';
 import { setupVR } from './vr.js';
+import { setupRecord } from './record.js';
 
 // ---------------------------------------------------------
 // 1. RENDERER, CAMERA, ENVIRONMENT
@@ -26,6 +27,12 @@ document.body.appendChild(VRButton.createButton(renderer));
 
 const env = buildEnvironment(scene, renderer);
 let vr = null; // set up in section 6
+
+// Who is training + their result, submitted through a prefilled Airtable form (record.js)
+const record = setupRecord({
+    onBegin: () => resetProtocol(),
+    onNewTrainee: () => resetProtocol()
+});
 
 // ---------------------------------------------------------
 // 2. AUDIO SYNTHESIS & HAPTICS
@@ -100,6 +107,7 @@ function checkOrder(stepId, controller) {
     const done = gowningSteps.indexOf(attempted) < currentStepIndex;
     raiseAlert(done ? `${attempted.short} already verified.` : `PROTOCOL VIOLATION: complete "${step.short}" first.`);
     if (!done) {
+        record.violation();
         playViolationBuzz();
         pulse(controller, 1.0, 250);
     }
@@ -112,6 +120,7 @@ function attemptStep(stepId, controller) {
 
     if (step.needsProximity && !checkUserProximity()) {
         raiseAlert('Stand on the ESD grounding mat to run the continuity check.');
+        record.violation();
         playViolationBuzz();
         pulse(controller, 1.0, 250);
         return;
@@ -120,7 +129,7 @@ function attemptStep(stepId, controller) {
     currentStepIndex++;
     alertMessage = '';
     pulse(controller, 0.5, 100);
-    if (isComplete()) playClearedFanfare(); else playSuccessChime();
+    if (isComplete()) { playClearedFanfare(); onCleared(); } else playSuccessChime();
     console.log(`Step passed: ${step.label}. Progress: ${currentStepIndex}/${gowningSteps.length}`);
     refreshAllUI();
 }
@@ -128,8 +137,28 @@ function attemptStep(stepId, controller) {
 function resetProtocol() {
     currentStepIndex = 0;
     alertMessage = '';
+    clearTimeout(exitTimer);
+    record.resetRun();
     refreshAllUI();
 }
+
+// Cleared: build the record + verification code, then get the trainee to the submit screen.
+// In VR the session ends by itself after a few seconds so the 2D submit screen can show.
+const EXIT_VR_AFTER = 8000;
+let exitTimer = 0;
+async function onCleared() {
+    await record.finish();
+    refreshAllUI();
+    if (renderer.xr.isPresenting) {
+        exitTimer = setTimeout(() => renderer.xr.getSession()?.end(), EXIT_VR_AFTER);
+    } else {
+        exitTimer = setTimeout(() => record.showSubmit(), 1500);
+    }
+}
+renderer.xr.addEventListener('sessionend', () => {
+    clearTimeout(exitTimer);
+    if (isComplete() && record.result) record.showSubmit();
+});
 
 // ---------------------------------------------------------
 // 4. WALL-MOUNTED TELEMETRY MONITOR
@@ -175,6 +204,11 @@ function drawTelemetry() {
     c.fillStyle = '#FFFFFF';
     c.font = '26px sans-serif';
     c.fillText(`Compliance Progress: ${currentStepIndex} / ${gowningSteps.length}`, 40, 165);
+    if (record.trainee) {
+        c.textAlign = 'right';
+        c.fillText(`Trainee: ${record.trainee.name}  (${record.trainee.id})`, W - 40, 165);
+        c.textAlign = 'left';
+    }
 
     gowningSteps.forEach((s, i) => {
         const y = 215 + i * 38;
@@ -190,7 +224,7 @@ function drawTelemetry() {
         c.fillText(alertMessage, 40, H - 30);
     } else if (isComplete()) {
         c.fillStyle = '#10b981';
-        c.fillText('STATUS: CLEARED FOR FABRICATION', 40, H - 30);
+        c.fillText(`STATUS: CLEARED  ·  CODE ${record.result?.code || '...'}`, 40, H - 30);
     } else {
         c.fillStyle = '#e2e8f0';
         c.fillText('STATUS: GOWNING IN PROGRESS', 40, H - 30);
@@ -212,7 +246,7 @@ function drawHud() {
         hudAlert.textContent = alertMessage;
     } else if (isComplete()) {
         hudAlert.style.color = '#10b981';
-        hudAlert.textContent = 'STATUS: CLEARED FOR FABRICATION';
+        hudAlert.textContent = `STATUS: CLEARED FOR FABRICATION · CODE ${record.result?.code || '...'}`;
     } else {
         hudAlert.textContent = '';
     }
@@ -311,6 +345,11 @@ vr = setupVR({
         checkOrder,
         complete: attemptStep,
         alert: (msg, controller) => { raiseAlert(msg); playViolationBuzz(); pulse(controller, 0.8, 150); },
+        onDrop: () => record.drop(),
+        onViolation: () => record.violation(),
+        clearedText: () => record.result
+            ? `CLEARED FOR FABRICATION. Code ${record.result.code}. Leaving VR shortly to submit your record.`
+            : 'CLEARED FOR FABRICATION. Saving your record...',
         getAlert: () => (alertMessage && performance.now() < alertUntil ? alertMessage : ''),
         pulse,
         onMat: () => checkUserProximity(),
@@ -413,4 +452,4 @@ window.addEventListener('resize', () => {
 });
 
 // Debug hook for testing in the browser console
-window.__vsu = { camera, vr, attemptStep, resetProtocol, get step() { return currentStepIndex; }, get alert() { return alertMessage; } };
+window.__vsu = { camera, vr, record, attemptStep, resetProtocol, get step() { return currentStepIndex; }, get alert() { return alertMessage; } };
