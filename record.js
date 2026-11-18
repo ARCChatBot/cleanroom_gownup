@@ -8,6 +8,11 @@
 export const AIRTABLE_FORM_URL = 'https://airtable.com/appvyJpWrOXaMTnMF/pagzWu0YrOxoiTzpT/form';
 
 const TRACK = 'Cleanroom Gowning & ESD (VR)';
+const SYSTEM = 'VR Cleanroom';
+// Shared C2C connector (c2c-connect.js): one sign-in for every C2C site, results saved to Airtable.
+const C2C = () => window.C2C || null;
+const V_PATTERN = /^V00\d{6}$/;
+const normV = (v) => (C2C() ? C2C().normalizeV(v) : String(v || '').trim().toUpperCase());
 // Record value -> Airtable column it is sent to (your "New Trainees" form).
 // Add more lines here if you add columns to the form later, e.g.
 //   score: 'vr_score',  code: 'vr_verification_code'
@@ -80,9 +85,20 @@ export function setupRecord({ onBegin, onNewTrainee }) {
     const idIn = document.getElementById('trainee-id');
     const beginBtn = document.getElementById('begin-btn');
     const saved = store.get(TRAINEE_KEY);
-    if (saved) { nameIn.value = saved.name || ''; idIn.value = saved.id || ''; }
+    const shared = C2C()?.student();
+    if (shared) { nameIn.value = C2C().fullName(shared); idIn.value = shared.v; }
+    else if (saved) { nameIn.value = saved.name || ''; idIn.value = saved.id || ''; }
 
-    const validate = () => { beginBtn.disabled = !(nameIn.value.trim().length >= 2 && idIn.value.trim().length >= 2); };
+    const idHint = document.getElementById('id-hint');
+    const validate = () => {
+        const id = normV(idIn.value);
+        const idOk = V_PATTERN.test(id);
+        if (idHint) {
+            idHint.hidden = idOk || idIn.value.trim().length < 9;
+            idHint.textContent = 'Enter your Student ID as V00 followed by 6 numbers, for example V00123456.';
+        }
+        beginBtn.disabled = !(nameIn.value.trim().length >= 2 && idOk);
+    };
     nameIn.addEventListener('input', validate);
     idIn.addEventListener('input', validate);
     validate();
@@ -90,8 +106,10 @@ export function setupRecord({ onBegin, onNewTrainee }) {
     document.getElementById('start-form').addEventListener('submit', (e) => {
         e.preventDefault();
         if (beginBtn.disabled) return;
-        trainee = { name: nameIn.value.trim(), id: idIn.value.trim() };
+        trainee = { name: nameIn.value.trim(), id: normV(idIn.value) };
+        idIn.value = trainee.id;
         store.set(TRAINEE_KEY, trainee);
+        if (C2C()) { C2C().rememberStudent(trainee.id, trainee.name); C2C().recordSignIn(SYSTEM); }
         start.hidden = true;
         document.body.classList.remove('gated');
         resetRun();
@@ -116,10 +134,21 @@ export function setupRecord({ onBegin, onNewTrainee }) {
             <dt>Completed</dt><dd>${esc(r.completedAt)}</dd>
             <dt>Verification code</dt><dd class="code">${esc(r.code)}</dd>`;
         const link = formLink(r);
-        submitBtn.disabled = !link;
-        submitNote.textContent = link
-            ? 'Opens the Airtable form with your results filled in. Press Submit on that form to save your record.'
-            : 'Instructor: the Airtable form link is not set yet (AIRTABLE_FORM_URL in record.js). Use "Copy record" for now.';
+        if (r.saved === 'yes') {
+            // Saved automatically to the C2C training record: no form needed.
+            submitBtn.hidden = true;
+            submitNote.textContent = 'Your result is saved to your C2C training record. Your instructor can see it now.';
+        } else if (r.saved === 'saving') {
+            submitBtn.hidden = true;
+            submitNote.textContent = 'Saving your result to your C2C training record…';
+        } else {
+            submitBtn.hidden = false;
+            submitBtn.disabled = !link;
+            submitNote.textContent = link
+                ? (r.saved === 'queued' ? 'The training server did not answer, so your result will be re-sent automatically. To be safe, also submit the form: ' : '') +
+                  'Opens the Airtable form with your results filled in. Press Submit on that form to save your record.'
+                : 'Instructor: the Airtable form link is not set yet (AIRTABLE_FORM_URL in record.js). Use "Copy record" for now.';
+        }
         submit.hidden = false;
     }
 
@@ -192,6 +221,14 @@ export function setupRecord({ onBegin, onNewTrainee }) {
             r.code = await makeCode(r);
             result = r;
             store.set(PENDING_KEY, r);
+            if (C2C()?.connected && V_PATTERN.test(r.id)) {
+                r.saved = 'saving';
+                C2C().saveResult({ system: SYSTEM, track: TRACK, score: r.score, studentId: r.id, fullName: r.name }).then((res) => {
+                    r.saved = res.ok ? 'yes' : res.queued ? 'queued' : 'no';
+                    if (res.ok) store.del(PENDING_KEY); else store.set(PENDING_KEY, r);
+                    if (!submit.hidden) showSubmit(r);
+                });
+            }
             return r;
         },
         showSubmit: () => result && showSubmit(result)

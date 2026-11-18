@@ -94,7 +94,8 @@
         <label for="trainee-name">Full name</label>
         <input id="trainee-name" name="name" autocomplete="name" required />
         <label for="trainee-id">Student ID</label>
-        <input id="trainee-id" name="student-id" required />
+        <input id="trainee-id" name="student-id" placeholder="V00123456" autocomplete="off" required style="text-transform: uppercase" />
+        <p class="small" id="id-hint" hidden style="color:#b91c1c;margin:6px 0 0 !important"></p>
         <button class="btn" id="begin-btn" type="submit" disabled>Begin training</button>
       </form>
     </div>
@@ -121,6 +122,8 @@
         VR: squeeze the grip at a dispenser to take the item, then put it on: booties to your feet, bouffant on your head, coverall to your chest, mask to your face, gloves and wrist strap to your other hand. Left stick moves, right stick turns.
       </div>
     </div>
+    <!-- Saves results to the C2C Airtable base (server address is set in the C2C repo) -->
+    <script src="https://arcchatbot.github.io/C2C/c2c-connect.js"></script>
     <script type="module" src="./main.js"></script>
   </body>
 </html>
